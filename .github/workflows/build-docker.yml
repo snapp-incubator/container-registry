@@ -23,7 +23,7 @@ jobs:
         id: extract-image-name
         run: |
 
-          TAG_MESSAGE=$(git tag -l --format='%(contents)' ${{ env.TAG }})
+          TAG_MESSAGE=$(git tag -n1 ${{ env.TAG }})
           echo ${{ env.TAG }} $TAG_MESSAGE
           if [[ "$TAG_MESSAGE" =~ build\/([^ ]+) ]]; then
             IMAGE_NAME=${BASH_REMATCH[1]}
