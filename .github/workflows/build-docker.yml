@@ -1,6 +1,5 @@
 name: Build and Push Docker Images
 
-
 on:
   push:
     branches:
@@ -8,14 +7,18 @@ on:
     # Optionally, you can add filters if needed
     # For example, you can use paths or commit message filters
 
-
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
 
+    env:
+      REGISTRY: ghcr.io
+      USERNAME: ${{ github.repository_owner }}
+      PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v2
 
       - name: Get commit message
         id: get-commit-message
@@ -23,7 +26,20 @@ jobs:
           COMMIT_MESSAGE=$(git log -1 --pretty=%B)
           echo "COMMIT_MESSAGE=$COMMIT_MESSAGE" >> $GITHUB_ENV
 
+      - name: Check commit message format
+        id: check-format
+        run: |
+          if [[ "$COMMIT_MESSAGE" =~ ^build\/([^:]+):(.+)$ ]]; then
+            echo "Commit message matches format. Proceeding..."
+            echo "FORMAT_VALID=true" >> $GITHUB_ENV
+          else
+            echo "Commit message does not match the required format."
+            echo "FORMAT_VALID=false" >> $GITHUB_ENV
+            exit 0  # Exit successfully to avoid showing a failed CI status
+          fi
+
       - name: Extract image name and version from commit message
+        if: env.FORMAT_VALID == 'true'
         id: extract-info
         run: |
           if [[ "$COMMIT_MESSAGE" =~ ^build\/([^:]+):(.+)$ ]]; then
@@ -37,36 +53,40 @@ jobs:
           fi
 
       - name: Verify Dockerfile exists
+        if: env.FORMAT_VALID == 'true'
         run: |
           if [ ! -f "$IMAGE_NAME/Dockerfile" ]; then
             echo "Dockerfile not found in the specified directory: $IMAGE_NAME"
             exit 1
           fi
 
-      - uses: docker/setup-qemu-action@v2
+      - name: Set up QEMU
+        if: env.FORMAT_VALID == 'true'
+        uses: docker/setup-qemu-action@v2
         with:
           platforms: amd64
 
+      - name: Set up Docker Buildx
+        if: env.FORMAT_VALID == 'true'
+        uses: docker/setup-buildx-action@v2
 
-      - uses: docker/setup-buildx-action@v2
-
-
-      - uses: docker/login-action@v2
+      - name: Log in to GitHub Container Registry
+        if: env.FORMAT_VALID == 'true'
+        uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-
       - name: Extract metadata for Docker
+        if: env.FORMAT_VALID == 'true'
         uses: docker/metadata-action@v4
         id: meta
         with:
           images: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
 
-
-
       - name: Build and push Docker image
+        if: env.FORMAT_VALID == 'true'
         uses: docker/build-push-action@v4
         with:
           file: ${{ env.IMAGE_NAME }}/Dockerfile
