@@ -9,11 +9,6 @@ jobs:
   build-and-push:
     runs-on: ubuntu-latest
 
-    env:
-      REGISTRY: docker.io
-      USERNAME: ${{ secrets.DOCKER_USERNAME }}
-      PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -27,7 +22,9 @@ jobs:
       - name: Extract image name from tag message
         id: extract-image-name
         run: |
+
           TAG_MESSAGE=$(git tag -l --format='%(contents)' ${{ env.TAG }})
+          echo ${{ env.TAG }} $TAG_MESSAGE
           if [[ "$TAG_MESSAGE" =~ build\/([^ ]+) ]]; then
             IMAGE_NAME=${BASH_REMATCH[1]}
             echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
