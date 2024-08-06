@@ -1,9 +1,13 @@
 name: Build and Push Docker Images
 
+
 on:
   push:
-    tags:
-      - '*'
+    branches:
+      - main  # or the branch you are using
+    # Optionally, you can add filters if needed
+    # For example, you can use paths or commit message filters
+
 
 jobs:
   build-and-push:
@@ -13,23 +17,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Get the latest tag
-        id: get-tag
+      - name: Get commit message
+        id: get-commit-message
         run: |
-          TAG=$(git describe --tags --abbrev=0)
-          echo "TAG=$TAG" >> $GITHUB_ENV
+          COMMIT_MESSAGE=$(git log -1 --pretty=%B)
+          echo "COMMIT_MESSAGE=$COMMIT_MESSAGE" >> $GITHUB_ENV
 
-      - name: Extract image name from tag message
-        id: extract-image-name
+      - name: Extract image name and version from commit message
+        id: extract-info
         run: |
-
-          TAG_MESSAGE=$(git tag -l --format='%(contents)' ${{ env.TAG }})
-          echo ${{ env.TAG }} $TAG_MESSAGE
-          if [[ "$TAG_MESSAGE" =~ build\/([^ ]+) ]]; then
+          if [[ "$COMMIT_MESSAGE" =~ ^build\/([^:]+):(.+)$ ]]; then
             IMAGE_NAME=${BASH_REMATCH[1]}
+            VERSION=${BASH_REMATCH[2]}
             echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
+            echo "VERSION=$VERSION" >> $GITHUB_ENV
           else
-            echo "No valid image name specified in tag message."
+            echo "Commit message does not match the required format."
             exit 1
           fi
 
@@ -71,6 +74,6 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}
+            ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }}
             ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:latest
           labels: ${{ steps.meta.outputs.labels }}
