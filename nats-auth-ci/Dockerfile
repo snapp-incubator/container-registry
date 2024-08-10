@@ -11,8 +11,16 @@ RUN apk add --no-cache \
     gnupg \ 
     sops \ 
     yq \ 
-    nats-server
+    nats-server \ 
+    unzip \ 
+    libcap
 
+RUN wget https://releases.hashicorp.com/vault/1.17.3/vault_1.17.3_linux_amd64.zip 
+RUN unzip vault_1.17.3_linux_amd64.zip
+
+RUN mv vault /usr/local/bin/
+RUN chmod +x /usr/local/bin/vault
+    
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 USER appuser
 WORKDIR /dir
