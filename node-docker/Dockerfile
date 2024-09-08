@@ -1,5 +1,5 @@
-# This image contains node and docker binaries to be used as the base image for the tasks
-# requiring node, yarn and docker commands together.
+# This image contains node and docker binaries to be used as the base image for the tasks 
+# that require node, yarn and docker commands together.
 FROM node:18-bookworm-slim
 
 RUN npm install npm@latest -g
