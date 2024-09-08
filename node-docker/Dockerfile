@@ -4,5 +4,5 @@ FROM node:18-bookworm-slim
 
 RUN npm install npm@latest -g
 RUN apt-get update && apt-get install -y \
-    docker \
+    docker.io \
     && rm -rf /var/lib/apt/lists/*
