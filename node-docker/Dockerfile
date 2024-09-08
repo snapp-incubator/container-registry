@@ -1,0 +1,8 @@
+# This image contains node and docker binaries to be used as the base image for the tasks
+# requiring node, yarn and docker commands together.
+FROM node:18-bookworm-slim
+
+RUN npm install npm@latest -g
+RUN apt-get update && apt-get install -y \
+    docker \
+    && rm -rf /var/lib/apt/lists/*
