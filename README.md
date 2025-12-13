@@ -50,7 +50,7 @@ build/<image_name>:<version>
 
 - **Valid Commits**: Commits with messages that match the `build/<image_name>:<version>` format will trigger the Docker image build and push process.
 - **Invalid Commits**: Commits not following the specified format will be skipped. The CI process will not build or push Docker images for these commits, ensuring that only relevant updates are processed.
-- 
+
 ## Summary
 
 By following these conventions, you ensure that Docker images are built and pushed automatically whenever a commit with the correct format is made. This approach helps maintain a well-organized repository and simplifies Docker image management.
