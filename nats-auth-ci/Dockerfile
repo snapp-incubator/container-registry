@@ -14,4 +14,4 @@ RUN apk add --no-cache \
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 USER appuser
 WORKDIR /dir
-ENTRYPOINT ["sh"]
+ENTRYPOINT ["/bin/sh"]
