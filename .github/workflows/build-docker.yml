@@ -3,13 +3,69 @@ name: Build and Push Docker Images
 on:
   push:
     branches:
-      - main  # or the branch you are using
-    # Optionally, you can add filters if needed
-    # For example, you can use paths or commit message filters
+      - main
 
 jobs:
-  build-and-push:
+  detect-images:
     runs-on: ubuntu-latest
+
+    outputs:
+      matrix: ${{ steps.changed-images.outputs.matrix }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Determine images to build
+        id: changed-images
+        run: |
+          BEFORE="${{ github.event.before }}"
+          AFTER="${{ github.sha }}"
+
+          if git rev-parse "$BEFORE" >/dev/null 2>&1; then
+            CHANGED_FILES=$(git diff --name-only "$BEFORE" "$AFTER")
+          else
+            CHANGED_FILES=$(git diff --name-only HEAD^ HEAD || true)
+            if [ -z "$CHANGED_FILES" ]; then
+              CHANGED_FILES=$(git ls-tree --name-only -r HEAD)
+            fi
+          fi
+
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          export CHANGED_FILES
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import os
+          import json
+
+          files = [f.strip() for f in os.environ.get("CHANGED_FILES", "").splitlines() if f.strip()]
+          images = []
+
+          for file in files:
+              parts = file.split("/", 1)
+              if len(parts) == 2:
+                  image = parts[0]
+                  if os.path.isfile(os.path.join(image, "Dockerfile")):
+                      images.append(image)
+
+          images = sorted(set(images))
+          print(f"matrix={json.dumps(images)}")
+          PY
+
+  build-and-push:
+    needs: detect-images
+    if: needs.detect-images.outputs.matrix != '[]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      matrix:
+        image: ${{ fromJSON(needs.detect-images.outputs.matrix) }}
 
     env:
       REGISTRY: ghcr.io
@@ -18,82 +74,69 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
 
-      - name: Get commit message
-        id: get-commit-message
+      - name: Read image version
+        id: version
         run: |
-          COMMIT_MESSAGE=$(git log -1 --pretty=%B)
-          echo "COMMIT_MESSAGE=$COMMIT_MESSAGE" >> $GITHUB_ENV
+          IMAGE_DIR="${{ matrix.image }}"
+          VERSION_FILE="$IMAGE_DIR/VERSION"
 
-      - name: Check commit message format
-        id: check-format
-        run: |
-          if [[ "$COMMIT_MESSAGE" =~ ^build\/([^:]+):(.+)$ ]]; then
-            echo "Commit message matches format. Proceeding..."
-            echo "FORMAT_VALID=true" >> $GITHUB_ENV
-          else
-            echo "Commit message does not match the required format."
-            echo "FORMAT_VALID=false" >> $GITHUB_ENV
-            exit 0  # Exit successfully to avoid showing a failed CI status
-          fi
-
-      - name: Extract image name and version from commit message
-        if: env.FORMAT_VALID == 'true'
-        id: extract-info
-        run: |
-          if [[ "$COMMIT_MESSAGE" =~ ^build\/([^:]+):(.+)$ ]]; then
-            IMAGE_NAME=${BASH_REMATCH[1]}
-            VERSION=${BASH_REMATCH[2]}
-            echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
-            echo "VERSION=$VERSION" >> $GITHUB_ENV
-          else
-            echo "Commit message does not match the required format."
+          if [ ! -d "$IMAGE_DIR" ]; then
+            echo "Image directory '$IMAGE_DIR' not found."
             exit 1
           fi
 
-      - name: Verify Dockerfile exists
-        if: env.FORMAT_VALID == 'true'
-        run: |
-          if [ ! -f "$IMAGE_NAME/Dockerfile" ]; then
-            echo "Dockerfile not found in the specified directory: $IMAGE_NAME"
+          if [ ! -f "$IMAGE_DIR/Dockerfile" ]; then
+            echo "Dockerfile not found in '$IMAGE_DIR'."
             exit 1
           fi
+
+          if [ ! -f "$VERSION_FILE" ]; then
+            echo "VERSION file not found at $VERSION_FILE."
+            exit 1
+          fi
+
+          VERSION=$(tr -d '[:space:]' < "$VERSION_FILE")
+
+          if [ -z "$VERSION" ]; then
+            echo "VERSION file is empty."
+            exit 1
+          fi
+
+          echo "IMAGE_NAME=$IMAGE_DIR" >> $GITHUB_ENV
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Set up QEMU
-        if: env.FORMAT_VALID == 'true'
-        uses: docker/setup-qemu-action@v2
+        uses: docker/setup-qemu-action@v3
         with:
           platforms: amd64
 
       - name: Set up Docker Buildx
-        if: env.FORMAT_VALID == 'true'
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
-        if: env.FORMAT_VALID == 'true'
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract metadata for Docker
-        if: env.FORMAT_VALID == 'true'
-        uses: docker/metadata-action@v4
+        uses: docker/metadata-action@v5
         id: meta
         with:
-          images: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
 
       - name: Build and push Docker image
-        if: env.FORMAT_VALID == 'true'
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v6
         with:
-          file: ${{ env.IMAGE_NAME }}/Dockerfile
+          file: ${{ matrix.image }}/Dockerfile
           context: .
           platforms: linux/amd64
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }}
-            ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:latest
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:${{ env.VERSION }}
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:latest
           labels: ${{ steps.meta.outputs.labels }}
