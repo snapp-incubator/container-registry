@@ -9,7 +9,8 @@ RUN apk add --no-cache \
   yq \
   nats-server \
   unzip \
-  libcap
+  libcap \
+  openssh-client
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 USER appuser
